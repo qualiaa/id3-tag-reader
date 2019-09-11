@@ -30,6 +30,17 @@ find (path:paths) = do
 isMusicFile :: FilePath -> Bool
 isMusicFile = isMusicExtension . map toLower . tailSafe . takeExtension 
 
+data ArtistResult = ArtistResult { getArtist :: Artist }
+
+artistResult :: TagGetter ArtistResult
+artistResult = ArtistResult <$> artistGetter
+
+artist :: FilePath -> IO ArtistResult
+artist path = getTags path artistResult
 
 someFunc :: FilePath -> IO ()
-someFunc rootDir = putStr =<< unlines .  filter isMusicFile <$> find [rootDir]
+someFunc rootDir = do
+    musicFiles <- filter isMusicFile <$> find [rootDir]
+
+    artists <- mapM artist musicFiles
+    putStr . unlines $ map (show . getArtist) artists
