@@ -35,6 +35,10 @@ module ParseBS
   , parseBytes
   , parseChar
   , parseString
+
+  , fail
+  , guard
+  , w2c
   ) where
 
 import Prelude hiding (fail)
@@ -184,6 +188,9 @@ endBy  :: Parse a -> Parse end -> Parse [a]
 endBy1 :: Parse a -> Parse end -> Parse [a]
 endBy  p sep = endBy1 p sep +++ return []
 endBy1 p sep = sepBy1 p sep <* sep
+
+guard :: Bool -> Parse ()
+guard p = if p then return () else fail "Guard failed"
 
 {- Don't really get this one
 chainl  :: Parse a -> Parse (a -> a -> a) -> a -> Parse a
