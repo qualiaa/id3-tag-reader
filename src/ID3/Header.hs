@@ -27,8 +27,7 @@ parseVersion = (,) <$> component <*> component
 parseSize :: Parse Int
 parseSize = do
     sizeBytes <- map fromIntegral . L.unpack <$> parseBytes 4
-    return (sum (map shift $ zip [3,2,1,0] sizeBytes))
-    where shift (n, b) = shiftL b (n*7)
+    return . sum . map (uncurry shiftL) $ zip sizeBytes [3*7,2*7..]
 
 parseHeader :: Parse ID3Header
 parseHeader = do
