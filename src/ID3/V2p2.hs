@@ -1,5 +1,6 @@
 module ID3.V2p2
     ( parseTags
+    , FrameHeader
     ) where
 
 import Data.Char (isAsciiUpper, isDigit)
@@ -10,6 +11,8 @@ import qualified Data.ByteString.Lazy as L
 import ID3.Header
 import ParseBS
 
+type FrameHeader = (String, Int)
+
 bytesToInteger :: [Word8] -> Int
 bytesToInteger bytes = sum . map (uncurry shiftL) $ zip (map fromIntegral $ reverse bytes) [0,8..]
 
@@ -17,20 +20,25 @@ parseFrameHeaderID :: Parse String
 parseFrameHeaderID = map w2c <$> count 3 headerChar
     where headerChar = satisfy (((||) <$> isAsciiUpper <*> isDigit) . w2c)
 
+-- size excludes header size
 parseFrameHeaderSize :: Parse Int
 parseFrameHeaderSize = do
     size  <- bytesToInteger . L.unpack <$> parseBytes 3
+    guard $ size > 0
     return size
 
--- size excludes header size
+parseFrameHeader :: Parse FrameHeader
+parseFrameHeader = (,) <$> parseFrameHeaderID <*> parseFrameHeaderSize
+
+parseFrame :: Parse FrameHeader
+parseFrame = do
+    header@(id, size) <- parseFrameHeader
+    frameData <- parseBytes size
+    return header
+
 -- must have at least one frame
-parseFrameHeader :: Parse [Int]--(String, Int, L.ByteString)
-parseFrameHeader = do
-    id <- parseFrameHeaderID
-    size <- map fromIntegral . L.unpack <$> parseBytes 3
-    --frameData <- parseBytes size
-    return size ---(id, size, frameData)
-
-parseTags :: Parse ()
-parseTags = return ()
-
+parseTags :: ID3Header -> Parse [FrameHeader]
+parseTags tagHeader = do
+    let size  = id3Size tagHeader
+        flags = id3Flags tagHeader
+    some parseFrame

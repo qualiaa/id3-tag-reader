@@ -14,9 +14,9 @@ type Version = (Int, Int)
 
 -- size excludes header size
 data ID3Header = ID3Header
-    { version :: Version
-    , flags :: Word8
-    , size :: Int
+    { id3Version :: Version
+    , id3Flags :: Word8
+    , id3Size :: Int
     } deriving Show
 
 parseVersion :: Parse Version
