@@ -1,7 +1,7 @@
 module Main where
 
 import System.Environment (getArgs)
-import ParseMP3
+import ID3
 
 main :: IO ()
-main = head <$> getArgs >>= someFunc
+main = mapM_ someFunc =<< getArgs
