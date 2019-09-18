@@ -11,7 +11,7 @@ import Data.Word (Word8)
 import qualified Data.ByteString.Lazy as L
 
 import ID3.Header
-import ID3.Unsynchronisation (deunsynchronise, parseUnsyncByte)
+import ID3.Unsynchronisation (deunsynchronise)
 import ParseBS
 
 type FrameHeader = (String, Int, [Word8])
@@ -44,7 +44,7 @@ parseFrame = do
 
 checkCRC :: Int -> Parse ()
 checkCRC framesSize = do
-    correctCRC <- bytesToInteger <$> count 4 parseUnsyncByte
+    correctCRC <- bytesToInteger <$> count 4 parseByte
     calculatedCRC <- crc32 . L.take framesSize' <$> look
     guard $ correctCRC == calculatedCRC
 
