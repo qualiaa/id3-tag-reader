@@ -1,8 +1,10 @@
 module ID3.Unsynchronisation
     ( deunsynchronise
-    , tagsWithoutUnsync
+
+    , tagWithoutUnsync
     , fileWithoutUnsync
-    , unsyncByte
+
+    , parseUnsyncByte
     ) where
 
 import Control.Applicative ((<|>))
@@ -15,17 +17,23 @@ import ParseBS
 unsyncByte :: Parse Word8
 unsyncByte = head <$>  bytes [0xFF,0x00]
 
-tagsWithoutUnsync :: Int -> Parse [Word8]
-tagsWithoutUnsync tagsSize = replicateM tagsSize $ unsyncByte <|> parseByte
+parseUnsyncByte :: Parse Word8
+parseUnsyncByte = unsyncByte <|> parseByte
+
+tagWithoutUnsync :: Int -> Parse [Word8]
+tagWithoutUnsync 0 = return []
+tagWithoutUnsync tagSize = do
+    (:) <$> unsyncByte <*> tagWithoutUnsync (tagSize-2) <|>
+        (:) <$> parseByte <*> tagWithoutUnsync (tagSize-1)
 
 fileWithoutUnsync :: Int -> Parse L.ByteString
-fileWithoutUnsync tagsSize = do
-    tagBytes <- tagsWithoutUnsync tagsSize
+fileWithoutUnsync tagSize = do
+    tagBytes <- tagWithoutUnsync tagSize
     rest <- look
     return $ (L.pack tagBytes) <> rest
 
 deunsynchronise :: Int -> Parse ()
-deunsynchronise tagsSize = do
+deunsynchronise tagSize = do
     remainingInput <- look
-    let Just fixedInput = parse (fileWithoutUnsync tagsSize) remainingInput
+    let Just fixedInput = parse (fileWithoutUnsync tagSize) remainingInput
     puts fixedInput
