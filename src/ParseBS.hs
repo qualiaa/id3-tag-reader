@@ -122,7 +122,7 @@ satisfy p = do
 
 munch :: (Word8 -> Bool) -> Parse L.ByteString
 munch p = do
-    (parsed, remaining) <- L.span p <$> gets
+    (parsed, remaining) <- L.span p <$> look
     puts remaining
     return parsed
 
