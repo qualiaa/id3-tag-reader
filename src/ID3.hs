@@ -20,7 +20,7 @@ parseV2 :: Parse [ID3.V2p2.FrameHeader]
 parseV2 = do
     header <- parseHeader
     case id3Version header of
-        (2,_) -> ID3.V2p2.parseTags header
+        (2,_) -> ID3.V2p2.parseTag header
         otherwise -> fail "Unhandled version"
 
 parseID3 :: Parse [ID3.V2p2.FrameHeader]

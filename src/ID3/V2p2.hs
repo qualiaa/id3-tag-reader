@@ -1,11 +1,11 @@
 module ID3.V2p2
-    ( parseTags
+    ( parseTag
     , FrameHeader
     ) where
 
 import Control.Monad (guard, when)
 import Data.Char (isAsciiUpper, isDigit)
-import Data.Bits (shiftL, Bits(..))
+import Data.Bits (countTrailingZeros, shiftL, Bits(..))
 import Data.Word (Word8)
 import qualified Data.ByteString.Lazy as L
 
@@ -19,8 +19,8 @@ bytesToInteger :: [Word8] -> Int
 bytesToInteger bytes = sum . map (uncurry shiftL) $ zip (map fromIntegral $ reverse bytes) [0,8..]
 
 parseFrameHeaderID :: Parse String
-parseFrameHeaderID = map w2c <$> count 3 headerChar
-    where headerChar = satisfy (((||) <$> isAsciiUpper <*> isDigit) . w2c)
+parseFrameHeaderID = count 3 headerChar
+    where headerChar = w2c <$> satisfy (((||) <$> isAsciiUpper <*> isDigit) . w2c)
 
 -- size excludes header size
 parseFrameHeaderSize :: Parse Int
@@ -38,15 +38,15 @@ parseFrame = do
     frameData <- parseBytes size
     return header
 
--- must have at least one frame
-parseTags :: ID3Header -> Parse [FrameHeader]
-parseTags tagHeader = do
+-- Must have at least one frame
+parseTag :: ID3Header -> Parse [FrameHeader]
+parseTag tagHeader = do
     let size  = id3Size tagHeader
         flags = id3Flags tagHeader
         unsynchronisation = testBit flags 7
         compression       = testBit flags 6
 
-    -- TODO: remaining bits should be 0
-    guard (not compression)
+    -- Remaining bits should be 0
+    guard $ not compression && countTrailingZeros flags >= 6
     when unsynchronisation $ deunsynchronise size
     some parseFrame
