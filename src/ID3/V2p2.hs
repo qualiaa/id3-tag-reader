@@ -39,7 +39,7 @@ parseFrame = do
     return header
 
 -- Must have at least one frame
-parseTag :: ID3Header -> Parse [FrameHeader]
+parseTag :: ID3Header -> Parse String
 parseTag tagHeader = do
     let size  = id3Size tagHeader
         flags = id3Flags tagHeader
@@ -48,5 +48,5 @@ parseTag tagHeader = do
 
     -- Remaining bits should be 0
     guard $ not compression && countTrailingZeros flags >= 6
-    when unsynchronisation . void $ deunsynchronise size
-    some parseFrame
+    when unsynchronisation $ void $ deunsynchronise size
+    show <$> some parseFrame

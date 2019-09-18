@@ -81,7 +81,7 @@ parseExtendedHeader tagSize = do
     when crc $ checkCRC framesSize
 
 -- Must have at least one frame
-parseTag :: ID3Header -> Parse [FrameHeader]
+parseTag :: ID3Header -> Parse String
 parseTag tagHeader = do
     let tagSize  = id3Size tagHeader
         flags = id3Flags tagHeader
@@ -97,4 +97,4 @@ parseTag tagHeader = do
                              else do
                                 newSize <- deunsynchronise tagSize
                                 ext newSize
-    some parseFrame
+    show <$> some parseFrame
