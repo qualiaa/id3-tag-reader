@@ -11,11 +11,12 @@ import qualified Data.ByteString.Lazy as L
 
 import ParseBS
 import ID3.Header
+import qualified ID3.V1
 import qualified ID3.V2p2
 import qualified ID3.V2p3
 
-parseV1 :: Parse ()
-parseV1 = fail "Not implemented"
+parseV1 :: Parse String
+parseV1 = ID3.V1.parseTag
 
 parseV2 :: Parse String
 parseV2 = do
@@ -26,7 +27,7 @@ parseV2 = do
         otherwise -> fail "Unhandled version"
 
 parseID3 :: Parse String
-parseID3 = parseV2 -- <|> parseV1
+parseID3 = parseV2 <|> parseV1
 
 someFunc file = do
     fileContents <- openFile file ReadMode >>= L.hGetContents
