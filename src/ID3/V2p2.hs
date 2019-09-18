@@ -3,12 +3,14 @@ module ID3.V2p2
     , FrameHeader
     ) where
 
+import Control.Monad (guard, when)
 import Data.Char (isAsciiUpper, isDigit)
 import Data.Bits (shiftL, Bits(..))
 import Data.Word (Word8)
 import qualified Data.ByteString.Lazy as L
 
 import ID3.Header
+import ID3.Unsynchronisation (deunsynchronise)
 import ParseBS
 
 type FrameHeader = (String, Int)
@@ -41,4 +43,10 @@ parseTags :: ID3Header -> Parse [FrameHeader]
 parseTags tagHeader = do
     let size  = id3Size tagHeader
         flags = id3Flags tagHeader
+        unsynchronisation = testBit flags 7
+        compression       = testBit flags 6
+
+    -- TODO: remaining bits should be 0
+    guard (not compression)
+    when unsynchronisation $ deunsynchronise size
     some parseFrame

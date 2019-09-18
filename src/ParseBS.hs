@@ -27,6 +27,8 @@ module ParseBS
 
   , string
   , char
+  , byte
+  , bytes
   , eof
   , skipZeros
   , skipSpaces
@@ -37,8 +39,8 @@ module ParseBS
   , parseString
 
   , fail
-  , guard
   , w2c
+  , puts
   ) where
 
 import Prelude hiding (fail)
@@ -152,6 +154,12 @@ string s = do
 char :: Char -> Parse Char
 char c = w2c <$> satisfy ((c ==) . w2c)
 
+byte :: Word8 -> Parse Word8
+byte b = satisfy (b==)
+
+bytes :: [Word8] -> Parse [Word8]
+bytes = sequence . map byte
+
 eof :: Parse ()
 eof = do
     next <- peekByte
@@ -188,9 +196,6 @@ endBy  :: Parse a -> Parse end -> Parse [a]
 endBy1 :: Parse a -> Parse end -> Parse [a]
 endBy  p sep = endBy1 p sep +++ return []
 endBy1 p sep = sepBy1 p sep <* sep
-
-guard :: Bool -> Parse ()
-guard p = if p then return () else fail "Guard failed"
 
 {- Don't really get this one
 chainl  :: Parse a -> Parse (a -> a -> a) -> a -> Parse a
