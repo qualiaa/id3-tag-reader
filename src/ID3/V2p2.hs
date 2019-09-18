@@ -3,7 +3,7 @@ module ID3.V2p2
     , FrameHeader
     ) where
 
-import Control.Monad (guard, when)
+import Control.Monad (guard, when, void)
 import Data.Char (isAsciiUpper, isDigit)
 import Data.Bits (countTrailingZeros, shiftL, Bits(..))
 import Data.Word (Word8)
@@ -48,5 +48,5 @@ parseTag tagHeader = do
 
     -- Remaining bits should be 0
     guard $ not compression && countTrailingZeros flags >= 6
-    when unsynchronisation $ deunsynchronise size
+    when unsynchronisation . void $ deunsynchronise size
     some parseFrame

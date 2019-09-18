@@ -32,8 +32,9 @@ fileWithoutUnsync tagSize = do
     rest <- look
     return $ (L.pack tagBytes) <> rest
 
-deunsynchronise :: Int -> Parse ()
+deunsynchronise :: Int -> Parse Int
 deunsynchronise tagSize = do
     remainingInput <- look
     let Just fixedInput = parse (fileWithoutUnsync tagSize) remainingInput
     puts fixedInput
+    return . fromIntegral $ L.length fixedInput
