@@ -4,16 +4,20 @@ module ID3.V2p2
     ) where
 
 import Control.Monad (guard, when, void)
-import Data.Char (isAsciiUpper, isDigit)
 import Data.Bits (countTrailingZeros, shiftL, Bits(..))
+import Data.Char (isAsciiUpper, isDigit)
+import Data.Maybe (isJust)
+import Data.List (intercalate)
 import Data.Word (Word8)
 import qualified Data.ByteString.Lazy as L
+import qualified Data.ByteString.Lazy.Char8 as L8
 
 import ID3.Header
 import ID3.Unsynchronisation (deunsynchronise)
 import ParseBS
 
 type FrameHeader = (String, Int)
+type Frame = (FrameHeader, L.ByteString)
 
 bytesToInteger :: [Word8] -> Int
 bytesToInteger bytes = sum . map (uncurry shiftL) $ zip (map fromIntegral $ reverse bytes) [0,8..]
@@ -32,11 +36,11 @@ parseFrameHeaderSize = do
 parseFrameHeader :: Parse FrameHeader
 parseFrameHeader = (,) <$> parseFrameHeaderID <*> parseFrameHeaderSize
 
-parseFrame :: Parse FrameHeader
-parseFrame = do
-    header@(id, size) <- parseFrameHeader
+extractFrame :: Parse Frame
+extractFrame = do
+    header@(_, size) <- parseFrameHeader
     frameData <- parseBytes size
-    return header
+    return (header, frameData)
 
 -- Must have at least one frame
 parseTag :: ID3Header -> Parse String
@@ -48,5 +52,17 @@ parseTag tagHeader = do
 
     -- Remaining bits should be 0
     guard $ not compression && countTrailingZeros flags >= 6
-    when unsynchronisation $ void $ deunsynchronise size
-    show <$> some parseFrame
+
+    newSize <- if unsynchronisation then deunsynchronise size
+                                    else return size
+
+    numBytesAfterHeader <- bsSize <$> look
+    frames <- some extractFrame
+    bytesAfterFrames <- look
+    let numPaddingBytes = newSize - (numBytesAfterHeader - (bsSize bytesAfterFrames))
+        paddingBytes = L.take (fromIntegral numPaddingBytes) bytesAfterFrames
+    bytes $ replicate numPaddingBytes 0
+    return . show $ map (fst.fst) frames
+
+bsSize :: (Integral a) => L.ByteString -> a
+bsSize bs = fromIntegral $ L.length bs
