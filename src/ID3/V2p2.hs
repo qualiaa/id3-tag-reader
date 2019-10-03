@@ -5,15 +5,16 @@ module ID3.V2p2
     , parseTextFrame
     ) where
 
-import Control.Arrow (first)
+import Control.Arrow (first, second)
 import Control.Monad (guard)
 import Data.Bits (countTrailingZeros, shiftL, Bits(..))
 import Data.Char (isAsciiUpper, isDigit)
-import Data.Text.Encoding (decodeLatin1, decodeUtf16LEWith)
+import Data.Text.Encoding (decodeLatin1, decodeUtf16LEWith, decodeUtf16BEWith)
 import Data.Text.Encoding.Error (replace)
 import Data.Word (Word8)
 import qualified Data.ByteString as S
 import qualified Data.ByteString.Lazy as L
+import qualified Data.ByteString.Lazy.Char8 as L8
 import qualified Data.Text as T
 
 import ID3.Header
@@ -176,16 +177,26 @@ parseEncoding = toEncoding <$> satisfy (`elem` [0,1])
     where toEncoding 0 = Latin1
           toEncoding 1 = Utf16
 
+decodeUtf s
+    | firstChar == le = littleEndian rest
+    | firstChar == be = bigEndian rest
+    | otherwise  = bigEndian s
+    where (firstChar, rest) = S.splitAt 2 s
+          le = S.pack [0xff, 0xfe]
+          be = S.pack [0xfe, 0xff]
+          littleEndian = decodeUtf16LEWith qm
+          bigEndian    = decodeUtf16BEWith qm
+          qm = replace '?'
+
 -- parseFrameContent :: FrameHeader
 textEncoder :: Encoding -> (S.ByteString -> T.Text)
 textEncoder Latin1 = decodeLatin1
-textEncoder Utf16  = decodeUtf16LEWith (replace '?')
+textEncoder Utf16  = decodeUtf
 
 zeroTerminate :: Encoding -> S.ByteString -> (S.ByteString, S.ByteString)
-zeroTerminate Latin1 = S.break (/=0)
-zeroTerminate Utf16 = (first S.concat) . zeroTerminateUtf16
+zeroTerminate Latin1 = second (S.drop 1) . S.break (==0)
+zeroTerminate Utf16 = first S.concat . zeroTerminateUtf16
 
--- TODO: This should fail if odd number of characters 
 zeroTerminateUtf16 :: S.ByteString -> ([S.ByteString], S.ByteString)
 zeroTerminateUtf16 s
     | S.length s < 2 = ([S.empty], S.empty)
