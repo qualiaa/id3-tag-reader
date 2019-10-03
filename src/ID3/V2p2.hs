@@ -4,6 +4,7 @@ module ID3.V2p2
     , UnparsedFrame
     , Frame(..)
     , parseTextFrame
+    , parseUFI
     , parseComment
     ) where
 
@@ -28,6 +29,7 @@ type UnparsedFrame = (FrameHeader, L.ByteString)
 type LanguageCode = String
 data Frame = TextFrame T.Text
            | CommentFrame LanguageCode T.Text T.Text
+           | UniqueFileIdentifierFrame String L.ByteString
            deriving Show
 
 bytesToInteger :: [Word8] -> Int
@@ -232,3 +234,9 @@ parseComment (id, size) = do
         text = fst $ zeroTerminate encoding rest
 
     return $ CommentFrame language (textEncoder encoding description) (textEncoder encoding text)
+
+parseUFI :: FrameHeader -> Parse Frame
+parseUFI (id, size) = do
+    owner <- manyTill parseChar (byte 0)
+    let left = size - (length owner + 1)
+    UniqueFileIdentifierFrame <$> return owner <*> parseBytes left
