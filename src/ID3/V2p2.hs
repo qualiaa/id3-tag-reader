@@ -6,8 +6,10 @@ module ID3.V2p2
     , parseTextFrame
     , parseUFI
     , parseComment
+    , parsePIC
     ) where
 
+import Control.Applicative ((<|>))
 import Control.Arrow (first, second)
 import Control.Monad (guard)
 import Data.Bits (countTrailingZeros, shiftL, Bits(..))
@@ -30,7 +32,11 @@ type LanguageCode = String
 data Frame = TextFrame T.Text
            | CommentFrame LanguageCode T.Text T.Text
            | UniqueFileIdentifierFrame String L.ByteString
+           | PictureFrame String Word8 T.Text L.ByteString
            deriving Show
+
+bsToInteger :: L.ByteString -> Int
+bsToInteger = bytesToInteger . L.unpack
 
 bytesToInteger :: [Word8] -> Int
 bytesToInteger bytes = sum . map (uncurry shiftL) $ zip (map fromIntegral $ reverse bytes) [0,8..]
@@ -42,7 +48,7 @@ parseFrameHeaderID = count 3 headerChar
 -- size excludes header size
 parseFrameHeaderSize :: Parse Int
 parseFrameHeaderSize = do
-    size  <- bytesToInteger . L.unpack <$> parseBytes 3
+    size  <- bsToInteger <$> parseBytes 3
     guard $ size > 0
     return size
 
@@ -77,31 +83,27 @@ parseTag tagHeader = do
     newSize <- if unsynchronisation then deunsynchronise size
                                     else return size
 
-    
-    bytesAfterHeader <- bsSize <$> look
+
+    p1 <- L.length <$> look
     -- Extract list of one or more frames
     frames <- some extractFrame
-    bytesAfterFrames <- bsSize <$> look
+    p2 <- L.length <$> look
 
     -- If the number of frame bytes parsed is less than the tag size, either
     -- the tag has 0 padding, we've failed to parse a valid frame, or the tag is
     -- invalid.
-    let numFrameBytes = (bytesAfterHeader - bytesAfterFrames)
-        numPaddingBytes = newSize - numFrameBytes
+    let numPaddingBytes = newSize - fromIntegral (p1 - p2)
 
     -- Ensure all padding bytes are 0 - otherwise we've failed to parse something
     parsePadding numPaddingBytes
     return frames
-
-bsSize :: (Integral a) => L.ByteString -> a
-bsSize bs = fromIntegral $ L.length bs
 
 
 {- ------------------------------------------------------------------- -
  - ID3 v2.2 Frames
  - ------------------------------------------------------------------- -}
 
-{- 
+{-
  - BUF
  - CNT
  - COM
@@ -122,7 +124,7 @@ bsSize bs = fromIntegral $ L.length bs
  - STC
  - UFI
  - ULT
-  
+
  - URL frames
  -
  - WAF
@@ -180,26 +182,27 @@ bsSize bs = fromIntegral $ L.length bs
  -          Value             <textstring>
  -}
 
+data Endianness = BE | LE deriving Eq
 data Encoding = Latin1 | Utf16 deriving Eq
 parseEncoding = toEncoding <$> satisfy (`elem` [0,1])
     where toEncoding 0 = Latin1
           toEncoding 1 = Utf16
 
-decodeUtf s
-    | firstChar == le = littleEndian rest
-    | firstChar == be = bigEndian rest
-    | otherwise  = bigEndian s
-    where (firstChar, rest) = S.splitAt 2 s
+decode LE = decodeUtf16LEWith (replace '?')
+decode BE = decodeUtf16BEWith (replace '?')
+
+decodeUtf string
+    | firstChar == le = decode LE rest
+    | firstChar == be = decode BE rest
+    | otherwise       = decode BE string
+    where (firstChar, rest) = S.splitAt 2 string
           le = S.pack [0xff, 0xfe]
           be = S.pack [0xfe, 0xff]
-          littleEndian = decodeUtf16LEWith qm
-          bigEndian    = decodeUtf16BEWith qm
-          qm = replace '?'
 
 -- parseFrameContent :: FrameHeader
-textEncoder :: Encoding -> (S.ByteString -> T.Text)
-textEncoder Latin1 = decodeLatin1
-textEncoder Utf16  = decodeUtf
+decodeText :: Encoding -> (S.ByteString -> T.Text)
+decodeText Latin1 = decodeLatin1
+decodeText Utf16  = decodeUtf
 
 zeroTerminate :: Encoding -> S.ByteString -> (S.ByteString, S.ByteString)
 zeroTerminate Latin1 = second (S.drop 1) . S.break (==0)
@@ -222,7 +225,7 @@ parseTextFrame (id, size) = do
     encoding <- parseEncoding
     str <- L.toStrict <$> parseBytes (size - 1)
     guard $ encoding == Latin1 || even (S.length str)
-    return . TextFrame . textEncoder encoding . fst $ zeroTerminate encoding str
+    return . TextFrame . decodeText encoding . fst $ zeroTerminate encoding str
 
 parseComment :: FrameHeader -> Parse Frame
 parseComment (id, size) = do
@@ -233,10 +236,36 @@ parseComment (id, size) = do
     let (description, rest) = zeroTerminate encoding str
         text = fst $ zeroTerminate encoding rest
 
-    return $ CommentFrame language (textEncoder encoding description) (textEncoder encoding text)
+    return $ CommentFrame language (decodeText encoding description) (decodeText encoding text)
 
 parseUFI :: FrameHeader -> Parse Frame
 parseUFI (id, size) = do
     owner <- manyTill parseChar (byte 0)
     let left = size - (length owner + 1)
     UniqueFileIdentifierFrame <$> return owner <*> parseBytes left
+
+parseZeroString :: Encoding -> Parse T.Text
+
+parseZeroString Latin1 = toText <$> manyTill parseByte (byte 0)
+    where toText = decodeText Latin1 . S.pack
+
+parseZeroString Utf16 = do
+    endianness <- (bytes [0xFF, 0xFE]            >> return LE)
+              <|> (optional (bytes [0xFE, 0xFF]) >> return BE)
+    decode endianness . S.concat . map (L.toStrict) <$> parseZeroString'
+
+    where parseZeroString' = do
+            bytes [0,0] >> return [] <|> (:) <$> parseBytes 2 <*> parseZeroString'
+
+
+parsePIC :: FrameHeader -> Parse Frame
+parsePIC (id, size) = do
+    encoding <- parseEncoding
+    fmt <- parseString 3
+    picType <- parseByte
+    p1 <- L.length <$> look
+    desc <- parseZeroString encoding
+    p2 <- L.length <$> look
+    let left = size - 5 - fromIntegral (p1 - p2)
+    pic <- parseBytes left
+    return $ PictureFrame fmt picType desc pic
