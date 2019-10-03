@@ -6,6 +6,7 @@ import Prelude hiding (fail)
 import System.IO (openFile, IOMode(..))
 import Data.List (partition)
 import Data.Maybe
+import Data.Either
 import Control.Applicative ((<|>))
 import Control.Monad (when, forM_)
 import qualified Data.ByteString.Lazy as L
@@ -32,20 +33,36 @@ parseV2 = do
         otherwise -> return []
 
 
+frameParser ('T':_) = Right ID3.V2p2.parseTextFrame
+frameParser "COM"   = Right ID3.V2p2.parseComment
+frameParser _ = Left "Unhandled frame"
+
+printFrame (ID3.V2p2.TextFrame txt) = TIO.putStrLn txt
+printFrame (ID3.V2p2.CommentFrame lang desc com) =
+        sequence_ [putStr $ show lang ++ " '",
+                   TIO.putStr desc, putStr "' '",
+                   TIO.putStr com,  putStrLn "'"]
+
 handleFrames :: [ID3.V2p2.UnparsedFrame] -> IO ()
 handleFrames frames = do
     let (textFrames, nontext) = partition (('T'==).head.fst.fst) frames
-        nontextIDs = map (fst.fst) nontext
 
-    putStrLn $ "Unhandled frames:" ++ show nontextIDs
 
     forM_ textFrames (\(header, bytes) -> do
         putStr $ fst header ++ ": "
         case parse (ID3.V2p2.parseTextFrame header) bytes of
             Nothing -> putStrLn "Failed to parse"
-            Just result -> TIO.putStrLn result
+            Just frame -> printFrame frame
         )
-
+    forM_ nontext (\(header, bytes) -> do
+        let id = fst header
+            parse' :: (ID3.V2p2.FrameHeader -> Parse ID3.V2p2.Frame) -> Either String ID3.V2p2.Frame
+            parse' p = maybe (Left "Failed to parse") Right $ parse (p header) bytes
+        putStr $ fst header ++ ": "
+        case frameParser id >>= parse' of
+            Left err -> putStrLn err
+            Right frame -> printFrame frame
+        )
 incrementalParse :: L.ByteString -> IO ()
 incrementalParse input = do
     case try parseHeader of

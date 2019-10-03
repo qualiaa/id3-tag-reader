@@ -2,7 +2,9 @@ module ID3.V2p2
     ( parseTag
     , FrameHeader
     , UnparsedFrame
+    , Frame(..)
     , parseTextFrame
+    , parseComment
     ) where
 
 import Control.Arrow (first, second)
@@ -23,6 +25,10 @@ import ParseBS
 
 type FrameHeader = (String, Int)
 type UnparsedFrame = (FrameHeader, L.ByteString)
+type LanguageCode = String
+data Frame = TextFrame T.Text
+           | CommentFrame LanguageCode T.Text T.Text
+           deriving Show
 
 bytesToInteger :: [Word8] -> Int
 bytesToInteger bytes = sum . map (uncurry shiftL) $ zip (map fromIntegral $ reverse bytes) [0,8..]
@@ -209,10 +215,20 @@ takeEveryOther [] = []
 takeEveryOther [x] = [x]
 takeEveryOther (x:_:xs) = x : takeEveryOther xs
 
-parseTextFrame :: FrameHeader -> Parse T.Text
+parseTextFrame :: FrameHeader -> Parse Frame
 parseTextFrame (id, size) = do
     encoding <- parseEncoding
     str <- L.toStrict <$> parseBytes (size - 1)
-    -- 
     guard $ encoding == Latin1 || even (S.length str)
-    return . textEncoder encoding . fst $ zeroTerminate encoding str
+    return . TextFrame . textEncoder encoding . fst $ zeroTerminate encoding str
+
+parseComment :: FrameHeader -> Parse Frame
+parseComment (id, size) = do
+    encoding <- parseEncoding
+    language <- L8.unpack <$> parseBytes 3
+    str <- L.toStrict <$> parseBytes (size - 4)
+
+    let (description, rest) = zeroTerminate encoding str
+        text = fst $ zeroTerminate encoding rest
+
+    return $ CommentFrame language (textEncoder encoding description) (textEncoder encoding text)
