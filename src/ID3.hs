@@ -37,15 +37,20 @@ frameParser ('T':_) = Right ID3.V2p2.parseTextFrame
 frameParser "COM"   = Right ID3.V2p2.parseComment
 frameParser "PIC"   = Right ID3.V2p2.parsePIC
 frameParser "UFI"   = Right ID3.V2p2.parseUFI
+frameParser "ULT"   = Right ID3.V2p2.parseULT
 frameParser _ = Left "Unhandled frame"
 
 printFrame (ID3.V2p2.TextFrame txt) = TIO.putStrLn txt
 printFrame (ID3.V2p2.UniqueFileIdentifierFrame owner _) = putStrLn owner
 printFrame (ID3.V2p2.PictureFrame fmt tpe desc _) = print (fmt, tpe, desc)
+printFrame (ID3.V2p2.UnsyncLyricsFrame lang desc lyrics) =
+    sequence_ [putStr $ show lang ++ " '",
+               TIO.putStr desc, putStr "' ",
+               TIO.putStrLn lyrics]
 printFrame (ID3.V2p2.CommentFrame lang desc com) =
-        sequence_ [putStr $ show lang ++ " '",
-                   TIO.putStr desc, putStr "' '",
-                   TIO.putStr com,  putStrLn "'"]
+    sequence_ [putStr $ show lang ++ " '",
+               TIO.putStr desc, putStr "' '",
+               TIO.putStr com,  putStrLn "'"]
 
 handleFrames :: [ID3.V2p2.UnparsedFrame] -> IO ()
 handleFrames frames = do

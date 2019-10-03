@@ -4,9 +4,10 @@ module ID3.V2p2
     , UnparsedFrame
     , Frame(..)
     , parseTextFrame
-    , parseUFI
     , parseComment
     , parsePIC
+    , parseUFI
+    , parseULT
     ) where
 
 import Control.Applicative ((<|>))
@@ -33,6 +34,7 @@ data Frame = TextFrame T.Text
            | CommentFrame LanguageCode T.Text T.Text
            | UniqueFileIdentifierFrame String L.ByteString
            | PictureFrame String Word8 T.Text L.ByteString
+           | UnsyncLyricsFrame LanguageCode T.Text T.Text
            deriving Show
 
 bsToInteger :: L.ByteString -> Int
@@ -230,13 +232,13 @@ parseTextFrame (id, size) = do
 parseComment :: FrameHeader -> Parse Frame
 parseComment (id, size) = do
     encoding <- parseEncoding
-    language <- L8.unpack <$> parseBytes 3
+    lang <- parseString 3
     str <- L.toStrict <$> parseBytes (size - 4)
 
     let (description, rest) = zeroTerminate encoding str
         text = fst $ zeroTerminate encoding rest
 
-    return $ CommentFrame language (decodeText encoding description) (decodeText encoding text)
+    return $ CommentFrame lang (decodeText encoding description) (decodeText encoding text)
 
 parseUFI :: FrameHeader -> Parse Frame
 parseUFI (id, size) = do
@@ -269,3 +271,11 @@ parsePIC (id, size) = do
     let left = size - 5 - fromIntegral (p1 - p2)
     pic <- parseBytes left
     return $ PictureFrame fmt picType desc pic
+
+parseULT :: FrameHeader -> Parse Frame
+parseULT (id, size) = do
+    encoding <- parseEncoding
+    UnsyncLyricsFrame
+        <$> parseString 3
+        <*> parseZeroString encoding
+        <*> parseZeroString encoding
