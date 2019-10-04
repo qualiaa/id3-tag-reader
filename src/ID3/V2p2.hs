@@ -254,10 +254,11 @@ parseZeroString Latin1 = toText <$> manyTill parseByte (byte 0)
 parseZeroString Utf16 = do
     endianness <- (bytes [0xFF, 0xFE]            >> return LE)
               <|> (optional (bytes [0xFE, 0xFF]) >> return BE)
-    decode endianness . S.concat . map (L.toStrict) <$> parseZeroString'
+    toText endianness <$> manyTill (parseBytes 2) (bytes [0,0])
 
-    where parseZeroString' = do
-            bytes [0,0] >> return [] <|> (:) <$> parseBytes 2 <*> parseZeroString'
+    where toText e = decode e . S.concat . map (L.toStrict)
+
+            --bytes [0,0] >> return [] <|> (:) <$> parseBytes 2 <*> parseZeroString'
 
 
 parsePIC :: FrameHeader -> Parse Frame
