@@ -2,6 +2,8 @@ module ID3.V2p3
     ( parseTag
     , FrameHeader
     , UnparsedFrame
+    , Frame(..)
+    , parseTextFrame
     ) where
 
 import Control.Monad (guard, when)
@@ -9,14 +11,19 @@ import Data.Char (isAsciiUpper, isDigit)
 import Data.Bits (countTrailingZeros, shiftL, Bits(..))
 import Data.Digest.CRC32
 import Data.Word (Word8)
+import qualified Data.ByteString as S
 import qualified Data.ByteString.Lazy as L
+import qualified Data.Text as T
 
 import ID3.Header
+import ID3.Internal.Text
 import ID3.Unsynchronisation (deunsynchronise)
 import ParseBS
 
 type FrameHeader = (String, Int, [Word8])
 type UnparsedFrame = (FrameHeader, L.ByteString)
+data Frame = TextFrame T.Text
+           deriving Show
 
 bytesToInteger :: (Integral a, Bits a, Integral b, Bits b) => [b] -> a
 bytesToInteger bytes = sum . map (uncurry shiftL) $ zip (map fromIntegral $ reverse bytes) [0,8..]
@@ -36,7 +43,7 @@ parseFrameHeader :: Parse FrameHeader
 parseFrameHeader = (,,)
     <$> parseFrameHeaderID
     <*> parseFrameHeaderSize
-    <*> count 2 parseByte
+    <*> count 2 (byte 0) -- TODO: Need to handle flags properly
 
 extractFrame :: Parse UnparsedFrame
 extractFrame = do
@@ -103,3 +110,13 @@ parseTag tagHeader = do
     parsePadding (newSize' - numBytes)
 
     return frames
+
+
+{- Frames -}
+
+parseTextFrame :: FrameHeader -> Parse Frame
+parseTextFrame (id, size, flags) = do
+    encoding <- parseEncoding
+    str <- L.toStrict <$> parseBytes (size - 1)
+    guard $ encoding == Latin1 || even (S.length str)
+    return . TextFrame . decodeText encoding . fst $ zeroTerminate encoding str

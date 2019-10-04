@@ -5,11 +5,10 @@ module ID3
 import Prelude hiding (fail)
 import System.IO (openFile, IOMode(..))
 import Data.Either
-import Data.List (partition)
 import Data.Maybe
 import Data.Tuple.Select (sel1)
 import Control.Applicative ((<|>))
-import Control.Monad (when, forM_)
+import Control.Monad (forM_)
 import qualified Data.ByteString.Lazy as L
 import qualified Data.Text.IO as TIO
 
@@ -67,8 +66,10 @@ handleFramesV2 frames = do
             Right frame -> printFrameV2 frame
         )
 
+frameParserV3 ('T':_) = Right ID3.V2p3.parseTextFrame
 frameParserV3 _ = Left "Unhandled frame"
-printFrameV3 _ = putStrLn "Farts"
+printFrameV3 (ID3.V2p3.TextFrame txt) = TIO.putStrLn txt
+
 handleFramesV3 :: [ID3.V2p3.UnparsedFrame] -> IO ()
 handleFramesV3 frames = do
     let (headers, bodies) = unzip frames
