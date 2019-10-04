@@ -35,7 +35,7 @@ fileWithoutUnsync tagSize = do
 deunsynchronise :: Int -> Parse Int
 deunsynchronise tagSize = do
     remainingInput <- look
-    let Just fixedInput = parse (fileWithoutUnsync tagSize) remainingInput
+    let Just fixedInput = evalParse (fileWithoutUnsync tagSize) remainingInput
     puts fixedInput
     let oldSize = fromIntegral $ L.length remainingInput
         newSize = fromIntegral $ L.length fixedInput

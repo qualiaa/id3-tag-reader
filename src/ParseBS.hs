@@ -1,6 +1,7 @@
 module ParseBS
   ( Parse(..)
-  , parse
+  , runParse
+  , evalParse
 
   , peekByte
   , look
@@ -62,10 +63,13 @@ import qualified Data.ByteString.Lazy.Char8 as L8
 import qualified Data.ByteString.Lazy as L
 
 data ParseState = ParseState { getString :: L.ByteString }
-newtype Parse a = Parse { runParse :: ParseState -> Maybe (a, ParseState) }
+newtype Parse a = Parse { runParse' :: ParseState -> Maybe (a, ParseState) }
 
-parse :: Parse a -> L.ByteString -> Maybe a
-parse parser = fmap fst . runParse parser . ParseState
+evalParse :: Parse a -> L.ByteString -> Maybe a
+evalParse parser = fmap fst . runParse parser
+
+runParse :: Parse a -> L.ByteString -> Maybe (a, L.ByteString)
+runParse parser = fmap (second getString) . runParse' parser . ParseState
 
 instance Functor Parse where
     fmap f parser = parser >>= (\a -> pure (f a))
@@ -84,7 +88,7 @@ instance Alternative Parse where
 
 instance Monad Parse where
     return = pure
-    pa >>= f = Parse $ \s -> runParse pa s >>= (\(a, s') -> runParse (f a) s')
+    pa >>= f = Parse $ \s -> runParse' pa s >>= (\(a, s') -> runParse' (f a) s')
 
 instance MonadFail Parse where
     fail _ = empty

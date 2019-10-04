@@ -59,7 +59,7 @@ handleFramesV2 frames = do
         parsers = map (frameParserV2 . fst) headers
 
     forM_ (zip3 parsers headers bodies) (\(parser, header, body) -> do
-        let parse' p = maybe (Left "Failed to parse") (Right) (parse (p header) body)
+        let parse' p = maybe (Left "Failed to parse") (Right) (evalParse (p header) body)
         putStr $ fst header ++ ": "
         case parser >>= parse' of
             Left err -> putStrLn err
@@ -68,20 +68,22 @@ handleFramesV2 frames = do
 
 incrementalParse :: L.ByteString -> IO ()
 incrementalParse input = do
-    case try parseHeader of
+    case runParse parseHeader input of
         Nothing -> putStrLn "Could not parse header"
-        Just header -> do
+        Just (header, rest) -> do
             let flags = id3Flags header
                 version = id3Version header
 
             putStr $ "Version " ++ show version ++ ", "
             putStr $ "Flags: " ++ show flags ++ ". "
 
-            case try parseID3 of
-                Nothing -> putStrLn "Could not parse rest of file"
-                Just [] -> putStrLn "Unhandled version"
-                Just frames -> putStrLn "" >> handleFramesV2 frames
-    where try x = parse x input
+            case version of
+                (2,_) -> do
+                    case evalParse (ID3.V2p2.parseTag header) rest of
+                        Nothing -> putStrLn "Could not parse rest of file"
+                        Just frames -> handleFramesV2 frames
+                (3,_) -> putStrLn "Version 3"
+                _     -> putStrLn "unhandled version"
 
 someFunc file = do
     fileContents <- openFile file ReadMode >>= L.hGetContents
