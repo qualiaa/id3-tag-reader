@@ -33,45 +33,39 @@ parseV2 = do
         otherwise -> return []
 
 
-frameParser ('T':_) = Right ID3.V2p2.parseTextFrame
-frameParser "COM"   = Right ID3.V2p2.parseComment
-frameParser "PIC"   = Right ID3.V2p2.parsePIC
-frameParser "UFI"   = Right ID3.V2p2.parseUFI
-frameParser "ULT"   = Right ID3.V2p2.parseULT
-frameParser _ = Left "Unhandled frame"
+frameParserV2 ('T':_) = Right ID3.V2p2.parseTextFrame
+frameParserV2 "COM"   = Right ID3.V2p2.parseComment
+frameParserV2 "PIC"   = Right ID3.V2p2.parsePIC
+frameParserV2 "UFI"   = Right ID3.V2p2.parseUFI
+frameParserV2 "ULT"   = Right ID3.V2p2.parseULT
+frameParserV2 _ = Left "Unhandled frame"
 
-printFrame (ID3.V2p2.TextFrame txt) = TIO.putStrLn txt
-printFrame (ID3.V2p2.UniqueFileIdentifierFrame owner _) = putStrLn owner
-printFrame (ID3.V2p2.PictureFrame fmt tpe desc _) = print (fmt, tpe, desc)
-printFrame (ID3.V2p2.UnsyncLyricsFrame lang desc lyrics) =
+printFrameV2 (ID3.V2p2.TextFrame txt) = TIO.putStrLn txt
+printFrameV2 (ID3.V2p2.UniqueFileIdentifierFrame owner _) = putStrLn owner
+printFrameV2 (ID3.V2p2.PictureFrame fmt tpe desc _) = print (fmt, tpe, desc)
+printFrameV2 (ID3.V2p2.UnsyncLyricsFrame lang desc lyrics) =
     sequence_ [putStr $ show lang ++ " '",
                TIO.putStr desc, putStr "' ",
                TIO.putStrLn lyrics]
-printFrame (ID3.V2p2.CommentFrame lang desc com) =
+printFrameV2 (ID3.V2p2.CommentFrame lang desc com) =
     sequence_ [putStr $ show lang ++ " '",
                TIO.putStr desc, putStr "' '",
                TIO.putStr com,  putStrLn "'"]
 
-handleFrames :: [ID3.V2p2.UnparsedFrame] -> IO ()
-handleFrames frames = do
-    let (textFrames, nontext) = partition (('T'==).head.fst.fst) frames
+handleFramesV2 :: [ID3.V2p2.UnparsedFrame] -> IO ()
+handleFramesV2 frames = do
+    let (headers, bodies) = unzip frames
 
+        parsers = map (frameParserV2 . fst) headers
 
-    forM_ textFrames (\(header, bytes) -> do
+    forM_ (zip3 parsers headers bodies) (\(parser, header, body) -> do
+        let parse' p = maybe (Left "Failed to parse") (Right) (parse (p header) body)
         putStr $ fst header ++ ": "
-        case parse (ID3.V2p2.parseTextFrame header) bytes of
-            Nothing -> putStrLn "Failed to parse"
-            Just frame -> printFrame frame
-        )
-    forM_ nontext (\(header, bytes) -> do
-        let id = fst header
-            parse' :: (ID3.V2p2.FrameHeader -> Parse ID3.V2p2.Frame) -> Either String ID3.V2p2.Frame
-            parse' p = maybe (Left "Failed to parse") Right $ parse (p header) bytes
-        putStr $ fst header ++ ": "
-        case frameParser id >>= parse' of
+        case parser >>= parse' of
             Left err -> putStrLn err
-            Right frame -> printFrame frame
+            Right frame -> printFrameV2 frame
         )
+
 incrementalParse :: L.ByteString -> IO ()
 incrementalParse input = do
     case try parseHeader of
@@ -86,7 +80,7 @@ incrementalParse input = do
             case try parseID3 of
                 Nothing -> putStrLn "Could not parse rest of file"
                 Just [] -> putStrLn "Unhandled version"
-                Just frames -> putStrLn "" >> handleFrames frames
+                Just frames -> putStrLn "" >> handleFramesV2 frames
     where try x = parse x input
 
 someFunc file = do
