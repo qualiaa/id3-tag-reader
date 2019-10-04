@@ -27,6 +27,7 @@ dependencies:
 - digest
 - text
 - safe
+- tuple
 
 library:
   source-dirs: src
