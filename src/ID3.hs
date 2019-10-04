@@ -4,9 +4,10 @@ module ID3
 
 import Prelude hiding (fail)
 import System.IO (openFile, IOMode(..))
+import Data.Either
 import Data.List (partition)
 import Data.Maybe
-import Data.Either
+import Data.Tuple.Select (sel1)
 import Control.Applicative ((<|>))
 import Control.Monad (when, forM_)
 import qualified Data.ByteString.Lazy as L
@@ -66,6 +67,22 @@ handleFramesV2 frames = do
             Right frame -> printFrameV2 frame
         )
 
+frameParserV3 _ = Left "Unhandled frame"
+printFrameV3 _ = putStrLn "Farts"
+handleFramesV3 :: [ID3.V2p3.UnparsedFrame] -> IO ()
+handleFramesV3 frames = do
+    let (headers, bodies) = unzip frames
+
+        parsers = map (frameParserV3 . sel1) headers
+
+    forM_ (zip3 parsers headers bodies) (\(parser, header, body) -> do
+        let parse' p = maybe (Left "Failed to parse") (Right) (evalParse (p header) body)
+        putStr $ sel1 header ++ ": "
+        case parser >>= parse' of
+            Left err -> putStrLn err
+            Right frame -> printFrameV3 frame
+        )
+
 incrementalParse :: L.ByteString -> IO ()
 incrementalParse input = do
     case runParse parseHeader input of
@@ -81,9 +98,12 @@ incrementalParse input = do
                 (2,_) -> do
                     case evalParse (ID3.V2p2.parseTag header) rest of
                         Nothing -> putStrLn "Could not parse rest of file"
-                        Just frames -> handleFramesV2 frames
-                (3,_) -> putStrLn "Version 3"
-                _     -> putStrLn "unhandled version"
+                        Just frames -> putStrLn "" >> handleFramesV2 frames
+                (3,_) -> do
+                    case evalParse (ID3.V2p3.parseTag header) rest of
+                        Nothing -> putStrLn "Could not parse rest of file"
+                        Just frames -> putStrLn "" >> handleFramesV3 frames
+                _ -> putStrLn "Unhandled version"
 
 someFunc file = do
     fileContents <- openFile file ReadMode >>= L.hGetContents

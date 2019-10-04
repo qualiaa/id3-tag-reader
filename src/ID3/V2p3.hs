@@ -1,6 +1,7 @@
 module ID3.V2p3
     ( parseTag
     , FrameHeader
+    , UnparsedFrame
     ) where
 
 import Control.Monad (guard, when)
@@ -15,6 +16,7 @@ import ID3.Unsynchronisation (deunsynchronise)
 import ParseBS
 
 type FrameHeader = (String, Int, [Word8])
+type UnparsedFrame = (FrameHeader, L.ByteString)
 
 bytesToInteger :: (Integral a, Bits a, Integral b, Bits b) => [b] -> a
 bytesToInteger bytes = sum . map (uncurry shiftL) $ zip (map fromIntegral $ reverse bytes) [0,8..]
@@ -27,7 +29,7 @@ parseFrameHeaderID = count 4 headerChar
 parseFrameHeaderSize :: Parse Int
 parseFrameHeaderSize = do
     size  <- bytesToInteger <$> count 4 parseByte
-    guard $ size > 0
+    --guard $ size > 0
     return size
 
 parseFrameHeader :: Parse FrameHeader
@@ -36,11 +38,11 @@ parseFrameHeader = (,,)
     <*> parseFrameHeaderSize
     <*> count 2 parseByte
 
-parseFrame :: Parse FrameHeader
-parseFrame = do
+extractFrame :: Parse UnparsedFrame
+extractFrame = do
     header@(id, size, flags) <- parseFrameHeader
     frameData <- parseBytes size
-    return header
+    return (header, frameData)
 
 checkCRC :: Int -> Parse ()
 checkCRC framesSize = do
@@ -50,22 +52,12 @@ checkCRC framesSize = do
 
     where framesSize' = fromIntegral framesSize
 
-parseExtendedHeader :: Int -> Parse ()
+parseExtendedHeader :: Int -> Parse Int
 parseExtendedHeader tagSize = do
     -- tagSize must not include unsynchronisation bytes.
     --
-    -- headerSize does not include itself.
-    --
-    -- Unclear if headerSize includes unsynchronisation bytes, but the
-    -- specification says it will either be 6 or 10, in which case it must not
-    -- consider unsynchronisation.
-    --
-    -- Padding is padding times 0x00 bytes at end of tag, so unsynchronisation
-    -- shouldn't affect its length.
-    --
-    -- We need to compute CRC on all the frame bytes before synchronisation. So
-    -- we can use tagSize and padding to work out how many bytes that is.
-    -- Fingers crossed.
+    -- headerSize does not include itself. Describes deunsynchronised size.
+    -- So header size is 6 if no CRC flag, or 10 if CRC flag is set
     headerSize       <- bytesToInteger <$> count 4 parseByte
     [flagsA, flagsB] <-                    count 2 parseByte
     padding          <- bytesToInteger <$> count 4 parseByte
@@ -79,9 +71,13 @@ parseExtendedHeader tagSize = do
         else headerSize == 6  && flagsA == 0
 
     when crc $ checkCRC framesSize
+    return headerSize
+
+parsePadding :: Int -> Parse ()
+parsePadding n = bytes (replicate n 0) >> return ()
 
 -- Must have at least one frame
-parseTag :: ID3Header -> Parse String
+parseTag :: ID3Header -> Parse [UnparsedFrame]
 parseTag tagHeader = do
     let tagSize  = id3Size tagHeader
         flags = id3Flags tagHeader
@@ -89,12 +85,21 @@ parseTag tagHeader = do
         extendedHeader    = testBit flags 6
         experimental      = testBit flags 5
 
+    -- Do not attempt to parse experimental frames
     -- Remaining bits should be 0
     guard $ not experimental && countTrailingZeros flags >= 5
 
-    let ext = when extendedHeader . parseExtendedHeader
-    if not unsynchronisation then ext tagSize
-                             else do
-                                newSize <- deunsynchronise tagSize
-                                ext newSize
-    show <$> some parseFrame
+    -- Deunsynchronise data if necessary
+    newSize <- if unsynchronisation then deunsynchronise tagSize
+                                    else return tagSize
+
+    -- Parse extended header
+    newSize' <- if extendedHeader then parseExtendedHeader newSize
+                                  else return newSize
+
+    -- Extract at least one frame
+    (frames, numBytes) <- parseWithSize (some extractFrame)
+
+    parsePadding (newSize' - numBytes)
+
+    return frames
