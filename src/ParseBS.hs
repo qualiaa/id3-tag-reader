@@ -38,20 +38,25 @@ module ParseBS
   , parseChar
   , parseString
 
+  , parseExactly
+  , parseAtMost
+  , parseWithSize
+
   , fail
   , w2c
   , puts
   ) where
 
 import Prelude hiding (fail)
+import Control.Applicative (Alternative(..))
+import Control.Monad (guard)
+import Control.Monad.Fail as F (MonadFail(fail))
 import Data.Bifunctor (second)
 import Data.Char (chr, isSpace)
 import Data.List (foldl1')
 import Data.Function ((&))
 import Data.Maybe (isNothing)
 import Data.Word (Word8)
-import Control.Monad.Fail as F (MonadFail(fail))
-import Control.Applicative (Alternative(..))
 
 import qualified Data.ByteString.Lazy.Char8 as L8
 import qualified Data.ByteString.Lazy as L
@@ -210,3 +215,22 @@ manyTill :: Parse a -> Parse end -> Parse [a]
 manyTill p end = (end >> return []) <|> ((:) <$> p <*> (manyTill p end))
 
 w2c = chr . fromIntegral
+
+-- With size
+parseExactly :: Int -> Parse a -> Parse a
+parseExactly n p = do
+    (result, numBytes) <- parseWithSize p
+    guard $ numBytes == n
+    return result
+
+parseAtMost n p = do
+    (result, numBytes) <- parseWithSize p
+    guard $ numBytes <= n
+    return result
+
+parseWithSize :: Parse a -> Parse (a, Int)
+parseWithSize p = do
+    p1 <- L.length <$> look
+    result <- p
+    p2 <- L.length <$> look
+    return (result, fromIntegral (p1 - p2))

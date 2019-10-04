@@ -85,16 +85,12 @@ parseTag tagHeader = do
     newSize <- if unsynchronisation then deunsynchronise size
                                     else return size
 
-
-    p1 <- L.length <$> look
-    -- Extract list of one or more frames
-    frames <- some extractFrame
-    p2 <- L.length <$> look
+    (frames, bytesParsed) <- parseWithSize $ some extractFrame
 
     -- If the number of frame bytes parsed is less than the tag size, either
     -- the tag has 0 padding, we've failed to parse a valid frame, or the tag is
     -- invalid.
-    let numPaddingBytes = newSize - fromIntegral (p1 - p2)
+    let numPaddingBytes = newSize - bytesParsed
 
     -- Ensure all padding bytes are 0 - otherwise we've failed to parse something
     parsePadding numPaddingBytes
@@ -260,16 +256,13 @@ parseZeroString Utf16 = do
 
             --bytes [0,0] >> return [] <|> (:) <$> parseBytes 2 <*> parseZeroString'
 
-
 parsePIC :: FrameHeader -> Parse Frame
 parsePIC (id, size) = do
     encoding <- parseEncoding
     fmt <- parseString 3
     picType <- parseByte
-    p1 <- L.length <$> look
-    desc <- parseZeroString encoding
-    p2 <- L.length <$> look
-    let left = size - 5 - fromIntegral (p1 - p2)
+    (desc, bytesParsed) <- parseWithSize $ parseZeroString encoding
+    let left = size - 5 - bytesParsed
     pic <- parseBytes left
     return $ PictureFrame fmt picType desc pic
 
