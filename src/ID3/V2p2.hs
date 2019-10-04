@@ -189,7 +189,7 @@ parseTextFrame (id, size) = do
     return . TextFrame . decodeText encoding . fst $ zeroTerminate encoding str
 
 parseComment :: FrameHeader -> Parse Frame
-parseComment (id, size) = do
+parseComment ("COM", size) = do
     encoding <- parseEncoding
     lang <- parseString 3
     str <- L.toStrict <$> parseBytes (size - 4)
@@ -200,14 +200,14 @@ parseComment (id, size) = do
     return $ CommentFrame lang (decodeText encoding description) (decodeText encoding text)
 
 parseUFI :: FrameHeader -> Parse Frame
-parseUFI (id, size) = do
+parseUFI ("UFI", size) = do
     owner <- manyTill parseChar (byte 0)
     let left = size - (length owner + 1)
     UniqueFileIdentifierFrame <$> return owner <*> parseBytes left
 
 
 parsePIC :: FrameHeader -> Parse Frame
-parsePIC (id, size) = do
+parsePIC ("PIC", size) = do
     encoding <- parseEncoding
     fmt <- parseString 3
     picType <- parseByte
@@ -217,7 +217,7 @@ parsePIC (id, size) = do
     return $ PictureFrame fmt picType desc pic
 
 parseULT :: FrameHeader -> Parse Frame
-parseULT (id, size) = do
+parseULT ("ULT", size) = do
     encoding <- parseEncoding
     UnsyncLyricsFrame
         <$> parseString 3
