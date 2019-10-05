@@ -4,7 +4,7 @@ module ID3.V2p2
     , UnparsedFrame
     , Frame(..)
     , parseTextFrame
-    , parseComment
+    , parseCommentFrame
     , parsePIC
     , parseUFI
     , parseULT
@@ -188,8 +188,8 @@ parseTextFrame (id, size) = do
     guard $ encoding == Latin1 || even (S.length str)
     return . TextFrame . decodeText encoding . fst $ zeroTerminate encoding str
 
-parseComment :: FrameHeader -> Parse Frame
-parseComment ("COM", size) = do
+parseCommentFrame :: FrameHeader -> Parse Frame
+parseCommentFrame ("COM", size) = do
     encoding <- parseEncoding
     lang <- parseString 3
     str <- L.toStrict <$> parseBytes (size - 4)

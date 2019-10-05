@@ -34,7 +34,7 @@ parseV2 = do
 
 
 frameParserV2 ('T':_) = Right ID3.V2p2.parseTextFrame
-frameParserV2 "COM"   = Right ID3.V2p2.parseComment
+frameParserV2 "COM"   = Right ID3.V2p2.parseCommentFrame
 frameParserV2 "PIC"   = Right ID3.V2p2.parsePIC
 frameParserV2 "UFI"   = Right ID3.V2p2.parseUFI
 frameParserV2 "ULT"   = Right ID3.V2p2.parseULT
@@ -67,8 +67,14 @@ handleFramesV2 frames = do
         )
 
 frameParserV3 ('T':_) = Right ID3.V2p3.parseTextFrame
+frameParserV3 "COMM"  = Right ID3.V2p3.parseCommentFrame
 frameParserV3 _ = Left "Unhandled frame"
+
 printFrameV3 (ID3.V2p3.TextFrame txt) = TIO.putStrLn txt
+printFrameV3 (ID3.V2p3.CommentFrame lang desc com) =
+    sequence_ [putStr $ show lang ++ " '",
+               TIO.putStr desc, putStr "' '",
+               TIO.putStr com,  putStrLn "'"]
 
 handleFramesV3 :: [ID3.V2p3.UnparsedFrame] -> IO ()
 handleFramesV3 frames = do

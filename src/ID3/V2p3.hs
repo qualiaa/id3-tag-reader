@@ -4,6 +4,7 @@ module ID3.V2p3
     , UnparsedFrame
     , Frame(..)
     , parseTextFrame
+    , parseCommentFrame
     ) where
 
 import Control.Monad (guard, when)
@@ -22,7 +23,9 @@ import ParseBS
 
 type FrameHeader = (String, Int, [Word8])
 type UnparsedFrame = (FrameHeader, L.ByteString)
+type LanguageCode = String
 data Frame = TextFrame T.Text
+           | CommentFrame LanguageCode T.Text T.Text
            deriving Show
 
 bytesToInteger :: (Integral a, Bits a, Integral b, Bits b) => [b] -> a
@@ -114,9 +117,15 @@ parseTag tagHeader = do
 
 {- Frames -}
 
-parseTextFrame :: FrameHeader -> Parse Frame
 parseTextFrame (id, size, flags) = do
-    encoding <- parseEncoding
+    e <- parseEncoding
     str <- L.toStrict <$> parseBytes (size - 1)
-    guard $ encoding == Latin1 || even (S.length str)
-    return . TextFrame . decodeText encoding . fst $ zeroTerminate encoding str
+    guard $ e == Latin1 || even (S.length str)
+    return . TextFrame . decodeText e . fst $ zeroTerminate e str
+
+parseCommentFrame ("COMM", size, flags) = do
+    e <- parseEncoding
+    lang <- parseString 3
+    (desc,ds) <- parseWithSize $ parseZeroString e
+    str <- L.toStrict <$> parseBytes (size - 4 - ds)
+    return . CommentFrame lang desc . decodeText e . fst $ zeroTerminate e str
