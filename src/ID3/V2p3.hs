@@ -5,6 +5,7 @@ module ID3.V2p3
     , Frame(..)
     , parseTextFrame
     , parseCommentFrame
+    , parsePRIV
     ) where
 
 import Control.Monad (guard, when)
@@ -26,6 +27,7 @@ type UnparsedFrame = (FrameHeader, L.ByteString)
 type LanguageCode = String
 data Frame = TextFrame T.Text
            | CommentFrame LanguageCode T.Text T.Text
+           | PrivateFrame String L.ByteString
            deriving Show
 
 bytesToInteger :: (Integral a, Bits a, Integral b, Bits b) => [b] -> a
@@ -129,3 +131,7 @@ parseCommentFrame ("COMM", size, flags) = do
     (desc,ds) <- parseWithSize $ parseZeroString e
     str <- L.toStrict <$> parseBytes (size - 4 - ds)
     return . CommentFrame lang desc . decodeText e . fst $ zeroTerminate e str
+
+parsePRIV ("PRIV", size, flags) = do
+    (owner, os) <- parseWithSize $ manyTill parseChar (byte 0)
+    PrivateFrame owner <$> parseBytes (size - os)

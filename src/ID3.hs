@@ -68,9 +68,11 @@ handleFramesV2 frames = do
 
 frameParserV3 ('T':_) = Right ID3.V2p3.parseTextFrame
 frameParserV3 "COMM"  = Right ID3.V2p3.parseCommentFrame
+frameParserV3 "PRIV"  = Right ID3.V2p3.parsePRIV
 frameParserV3 _ = Left "Unhandled frame"
 
 printFrameV3 (ID3.V2p3.TextFrame txt) = TIO.putStrLn txt
+printFrameV3 (ID3.V2p3.PrivateFrame owner _) = putStrLn owner
 printFrameV3 (ID3.V2p3.CommentFrame lang desc com) =
     sequence_ [putStr $ show lang ++ " '",
                TIO.putStr desc, putStr "' '",
